@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sweechip - Business Tracker</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use a cute, rounded font like Fredoka -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&display=swap');
+        
+        /* Animation for the new fluffy chick */
+        @keyframes gentle-bounce {
+            0%, 100% { transform: translateY(0) rotate(-3deg); }
+            50% { transform: translateY(-6px) rotate(3deg); }
+        }
+        .fluffy-chick-animation {
+            animation: gentle-bounce 2.5s ease-in-out infinite;
+        }
+
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: #FFFBEB; /* Creamy Yellow */
+            background-image: radial-gradient(#FEEFA9 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        /* --- NEW SWEECHIP THEME with more Baby Pink --- */
+        .yellow-primary { background-color: #FFD54F; }
+        .yellow-text { color: #D97706; }
+        .pink-accent { background-color: #FBCFE8; } /* Baby Pink */
+        .pink-text { color: #BE185D; }
+        .brown-text { color: #854D0E; }
+        .bg-light-yellow { background-color: #FEF9C3; }
+        
+        .btn-primary { background-color: #F9A8D4; color: #831843; transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-bottom: 3px solid #BE185D; font-weight: 600; }
+        .btn-primary:hover { background-color: #F472B6; transform: translateY(-2px); }
+        .btn-primary:active { transform: translateY(0); border-bottom-width: 1px; }
+
+        .btn-secondary { background-color: #FFD54F; color: #854D0E; border: 2px solid #D97706; transition: all 0.2s; }
+        .btn-secondary:hover { background-color: #FBBF24; transform: translateY(-2px); }
+
+        .card-header { border-bottom: 2px solid #FBCFE8; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+        .input-style { background-color: #fff; border: 2px solid #F9A8D4; padding: 0.75rem; border-radius: 0.75rem; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.05); }
+        
+        nav { border-bottom: 2px solid #FBBF24; }
+        .tab-button { background: #fff0c2; border: 2px solid #FBBF24; padding: 0.75rem 1.5rem; font-weight: 600; color: #D97706; cursor: pointer; transition: all 0.3s ease-in-out; border-radius: 9999px; margin: 0 0.25rem 0.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .tab-button:hover { transform: translateY(-2px); background-color: #FBBF24; color: #854D0E; }
+        .tab-button.active { background-color: #F9A8D4; color: #9D174D; border-color: #BE185D; transform: translateY(-2px) scale(1.05); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .cute-card { border-radius: 1.5rem !important; border-width: 2px !important; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.05) !important; }
+
+    </style>
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, orderBy, serverTimestamp, runTransaction, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- Firebase Configuration ---
+        const firebaseConfigPlaceholder = {
+            apiKey: "AIzaSyDYfl0TiMFHceE88GkHcl7XHDli-LSbArk",
+            authDomain: "a037b08f.firebaseapp.com",
+            projectId: "a037b08f",
+            storageBucket: "a037b08f.firebasestorage.app",
+            messagingSenderId: "485696187373",
+            appId: "1:485696187373:web:f9b40596c0d5eab5ae15e4",
+            measurementId: "G-QPJ29TZBKV"
+        };
+        const appId = 'sweechip-default';
+        const firebaseConfig = firebaseConfigPlaceholder;
+
+        let app, db, auth, currentUserId;
+        let tailorOutstandingBalance = 0, processorOutstandingBalance = 0;
+        
+        const DAILY_RECORDS_COLLECTION = `artifacts/${appId}/public/data/daily_records`;
+        const INVENTORY_DOC_PATH = `artifacts/${appId}/public/data/inventory/current_stock`;
+        const LABOR_PAYMENTS_COLLECTION = `artifacts/${appId}/public/data/labor_payments`;
+        const ORDER_TRACKER_COLLECTION = `artifacts/${appId}/public/data/order_tracker`; 
+
+        // --- FIREBASE INITIALIZATION ---
+        const initFirebase = async () => {
+            // This check prevents the Firebase error by stopping initialization if the placeholder values are still present.
+            if (firebaseConfig.apiKey === "YOUR_API_KEY" || firebaseConfig.projectId === "YOUR_PROJECT_ID") {
+                document.body.innerHTML = `<div class="p-8 text-center bg-yellow-100 text-yellow-800 rounded-2xl shadow-lg max-w-lg mx-auto mt-10 border-2 border-yellow-300">
+                    <h2 class="text-3xl font-bold">🐥 Configuration Needed!</h2>
+                    <p class="mt-3 font-semibold">Welcome to your Sweechip Tracker!</p>
+                    <p class="mt-2">To connect to your private database, you must copy your unique Firebase configuration keys into the HTML file.</p>
+                    <div class="mt-4 text-left font-mono bg-white p-3 rounded-lg text-sm border border-yellow-200">
+                        <p>Please find the variable named:</p>
+                        <code class="font-bold text-pink-500 text-base">firebaseConfigPlaceholder</code>
+                        <p class="mt-1">...in the script and replace the "YOUR_..." values with the real keys from your Firebase project settings.</p>
+                    </div>
+                    <p class="mt-3 text-sm text-gray-500">This is a required one-time setup step to secure your data.</p>
+                </div>`;
+                return; // Stop the function here to prevent the error
+            }
+
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                await signInAnonymously(auth);
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUserId = user.uid;
+                        document.getElementById('user-info').textContent = `Session ID: ${currentUserId}`;
+                        
+                        document.getElementById('initial-loader').style.display = 'none';
+                        document.getElementById('tracker-container').classList.remove('hidden');
+                        
+                        document.getElementById('date').value = getTodayDate();
+                        document.getElementById('orderDueDate').value = getTodayDate();
+                        switchTab('productivity');
+                        setupListeners();
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                // NEW: Specific error handling for missing database
+                if (error.message && error.message.includes("database (default) does not exist")) {
+                    document.body.innerHTML = `<div class="p-8 text-center bg-pink-100 text-pink-800 rounded-2xl shadow-lg max-w-2xl mx-auto mt-10 border-2 border-pink-300">
+                        <h2 class="text-3xl font-bold">🐥 Almost There! Create Your Database</h2>
+                        <p class="mt-3 font-semibold">Your tracker is correctly connected to your Firebase project, but the database itself hasn't been created yet.</p>
+                        <p class="mt-2">This is the final one-time setup step. Please follow these instructions:</p>
+                        <div class="mt-4 text-left bg-white p-4 rounded-lg border border-pink-200 space-y-2">
+                            <p>1. Go to your <a href="https://console.firebase.google.com/" target="_blank" class="font-bold text-blue-600 underline">Firebase Console</a> and select your project.</p>
+                            <p>2. In the left menu (under "Build"), click on <strong>Firestore Database</strong>.</p>
+                            <p>3. Click the big <strong>"Create database"</strong> button.</p>
+                            <p>4. Choose <strong>Start in production mode</strong> and click "Next".</p>
+                            <p>5. Choose a location for your database (e.g., a region in Asia or the US) and click <strong>"Enable"</strong>.</p>
+                        </div>
+                        <p class="mt-4">After you enable the database, simply refresh this page. Your Sweechip tracker will then load perfectly!</p>
+                    </div>`;
+                } else {
+                    // Generic error for other issues
+                    document.body.innerHTML = `<div class="p-8 text-center bg-red-100 text-red-800 rounded-lg max-w-lg mx-auto mt-10"><h2 class="text-2xl font-bold">🐥 Firebase Error</h2><p class="mt-2">Could not initialize Firebase. The configuration keys might be incorrect. Error: ${error.message}</p></div>`;
+                }
+            }
+        };
+        
+        // --- UTILITY & CORE FUNCTIONS ---
+        const formatPHP=(e=>new Intl.NumberFormat("en-PH",{style:"currency",currency:"PHP"}).format(e));
+        const getTodayDate=()=>(new Date).toISOString().split("T")[0];
+        const switchTab=e=>{
+            document.querySelectorAll(".tab-content").forEach(el=>el.classList.remove("active"));
+            document.querySelectorAll(".tab-button").forEach(el=>el.classList.remove("active"));
+            document.getElementById(`tab-content-${e}`).classList.add("active");
+            document.querySelector(`[data-tab="${e}"]`).classList.add("active");
+        };
+
+        // --- DATA LISTENERS ---
+        const setupListeners = () => {
+            onSnapshot(doc(db, INVENTORY_DOC_PATH), (doc) => {
+                const inventory = doc.exists() ? doc.data() : { totalCoversInStock: 0, stockFoam: 0, stockFinishedProducts: 0, coverDesigns: {} };
+                renderInventory(inventory);
+            }, (error) => console.error("Error fetching inventory:", error));
+
+            const recordsQuery = query(collection(db, DAILY_RECORDS_COLLECTION), orderBy("timestamp", "desc"));
+            onSnapshot(recordsQuery, (recordsSnapshot) => {
+                const dailyRecords = recordsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                const paymentsQuery = query(collection(db, LABOR_PAYMENTS_COLLECTION), orderBy("timestamp", "desc"));
+                onSnapshot(paymentsQuery, (paymentsSnapshot) => {
+                    const laborPayments = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    renderDashboard(dailyRecords, laborPayments);
+                    renderRecordsHistory(dailyRecords);
+                    renderPaymentsHistory(laborPayments);
+                }, (error) => console.error("Error fetching payments:", error));
+
+            }, (error) => console.error("Error fetching daily records:", error));
+
+            const ordersQuery = query(collection(db, ORDER_TRACKER_COLLECTION), orderBy("dueDate", "asc"));
+            onSnapshot(ordersQuery, (snapshot) => {
+                const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderOrders(orders);
+            }, (error) => console.error("Error fetching orders:", error));
+        };
+        
+        // --- RENDER FUNCTIONS ---
+        const renderInventory=e=>{document.getElementById("stock-covers").textContent=e.totalCoversInStock||0,document.getElementById("stock-foam").textContent=e.stockFoam||0,document.getElementById("stock-products").textContent=e.stockFinishedProducts||0;const t=document.getElementById("cover-designs-detail");t.innerHTML="";const o=Object.keys(e.coverDesigns||{}).sort();0===o.length?t.innerHTML='<p class="text-sm brown-text italic">No designs tracked yet.</p>':o.forEach(o=>{t.innerHTML+=`<div class="flex justify-between items-center text-sm bg-white/50 p-2 rounded-lg"><span class="brown-text">${o}:</span><span class="font-bold yellow-text">${e.coverDesigns[o]}</span></div>`})};const renderOrders=e=>{const t=document.getElementById("orders-body");let o=0;if(t.innerHTML="",0===e.length)return document.getElementById("total-pending-demand").textContent="0",void(t.innerHTML='<tr><td colspan="6" class="text-center py-4 brown-text">No orders currently logged.</td></tr>');e.forEach(e=>{e.status,"Pending"===e.status&&(o+=e.quantity);const n=(new Date(e.dueDate)).toLocaleDateString(),s="Pending"===e.status?"text-red-500 font-semibold":"text-green-600",a="Pending"===e.status?`<button onclick="window.handleCompleteOrder('${e.id}')" class="btn-primary text-xs px-2 py-1 rounded-full shadow-sm">Complete</button>`:'<span class="text-xs text-green-600 font-medium">✨ Done</span>',r={id:e.id,clientName:e.clientName,quantity:e.quantity,dueDate:e.dueDate},d=`<button onclick='window.loadOrderForEdit(${JSON.stringify(r)})' class="text-xs bg-yellow-300 text-brown-text px-3 py-1 rounded-full hover:bg-yellow-400 transition">Edit 📝</button>`,l=t.insertRow();l.className=`border-b border-yellow-200 hover:bg-yellow-50 text-brown-text ${"Pending"===e.status?"bg-red-50/50":"bg-green-50/50"}`,l.innerHTML=`<td class="p-2">${e.clientName}</td><td class="p-2 text-center">${e.quantity}</td><td class="p-2 text-center">${n}</td><td class="p-2 text-center"><span class="${s}">${e.status}</span></td><td class="p-2 text-center">${a}</td><td class="p-2 text-center">${d}</td>`}),document.getElementById("total-pending-demand").textContent=o};const renderPaymentsHistory=e=>{const t=document.getElementById("payments-body");if(t.innerHTML="",0===e.length)return void(t.innerHTML='<tr><td colspan="4" class="text-center py-4 brown-text">No payments logged yet.</td></tr>');e.forEach(e=>{const o=(new Date(1e3*e.timestamp.seconds)).toLocaleDateString(),n={id:e.id,amount:e.amount,recipient:e.recipient,notes:e.notes},s=t.insertRow();s.className="border-b border-yellow-200 hover:bg-yellow-50 text-brown-text",s.innerHTML=`<td class="p-2">${o}</td><td class="p-2 text-right font-medium text-green-600">${formatPHP(e.amount)}</td><td class="p-2 text-left text-sm text-gray-500">${e.recipient||"N/A"}: ${e.notes||"N/A"}</td><td class="p-2 text-center"><button onclick='window.loadPaymentForEdit(${JSON.stringify(n)})' class="text-xs bg-yellow-300 text-brown-text px-3 py-1 rounded-full hover:bg-yellow-400 transition">Edit 📝</button></td>`})};const renderDashboard=(e,t)=>{let o=0,n=0,s=0,a=0;e.forEach(e=>{s+=e.tailoredCovers||0,a+=e.processorCuts||0,o+=(e.productsSold||0)*220,n+=(e.productsSold||0)*169.88});const r=s*17,d=a*15,l=r+d;let i=t.filter(e=>"Tailor"===e.recipient).reduce((e,t)=>e+t.amount,0),c=t.filter(e=>"Processor"===e.recipient).reduce((e,t)=>e+t.amount,0);const p=t.filter(e=>"General"===e.recipient).reduce((e,t)=>e+t.amount,0),m=l>0?{t:r/l,p:d/l}:{t:.5,p:.5};i+=p*m.t,c+=p*m.p;t.reduce((e,t)=>e+t.amount,0);const u=r-i,b=d-c;tailorOutstandingBalance=u,processorOutstandingBalance=b;const y=l-(i+c+p),g=o-n-l;["tailor-incurred","processor-incurred"].forEach((e,t)=>{document.getElementById(e).textContent=formatPHP(0===t?r:d)}),["tailor-paid","processor-paid"].forEach((e,t)=>{document.getElementById(e).textContent=formatPHP(0===t?i:c)}),["tailor-outstanding","processor-outstanding"].forEach((e,t)=>{const o=document.getElementById(e),n=0===t?u:b;o.textContent=formatPHP(n),o.className=`text-lg font-extrabold mt-2 ${n>0?"text-red-700":"text-green-600"}`});const h=document.getElementById("labor-outstanding");h.textContent=formatPHP(y),h.className=`text-4xl font-extrabold ${y>0?"text-red-500":"text-green-600"}`,document.getElementById("total-revenue").textContent=formatPHP(o),document.getElementById("total-cogs").textContent=formatPHP(n),document.getElementById("net-profit").textContent=formatPHP(g);const f=document.getElementById("owner-shares");f.innerHTML="",[{name:"Videan",share:.4},{name:"Jason",share:.3},{name:"Ivy",share:.2},{name:"Rei",share:.1}].forEach(e=>{f.innerHTML+=`<p class="flex justify-between items-center text-lg font-semibold border-b border-pink-100 p-2"><span>${e.name} (${100*e.share}%):</span><span class="yellow-text font-extrabold">${formatPHP(g*e.share)}</span></p>`})};const loadRecordForEdit=e=>{switchTab("productivity"),document.getElementById("date").value=e.date,document.getElementById("tailoredCovers").value=e.tailoredCovers,document.getElementById("processorCuts").value=e.processorCuts,document.getElementById("completedMattresses").value=e.completedMattresses,document.getElementById("productsSold").value=e.productsSold;const t=document.getElementById("status-message-daily");t.textContent=`✏️ Loaded record for ${e.date}. Edit and submit to update.`,t.className="text-sm font-bold pink-text",document.getElementById("daily-entry-form").scrollIntoView({behavior:"smooth"})};const loadPaymentForEdit=e=>{switchTab("salary"),document.getElementById("paymentId").value=e.id,document.getElementById("paymentAmount").value=e.amount,document.getElementById("paymentRecipient").value=e.recipient,document.getElementById("paymentNotes").value=e.notes,document.getElementById("payment-submit-btn").textContent="Update Payment",document.getElementById("cancel-payment-edit").classList.remove("hidden");const t=document.getElementById("status-payment");t.textContent="✏️ Editing payment. Click 'Update' to save.",t.className="text-sm font-bold pink-text"};const loadOrderForEdit=e=>{switchTab("orders"),document.getElementById("orderId").value=e.id,document.getElementById("clientName").value=e.clientName,document.getElementById("orderQuantity").value=e.quantity,document.getElementById("orderDueDate").value=e.dueDate,document.getElementById("order-submit-btn").textContent="Update Order",document.getElementById("cancel-order-edit").classList.remove("hidden");const t=document.getElementById("status-message-order");t.textContent="✏️ Editing order. Click 'Update' to save.",t.className="text-sm font-bold pink-text"};const resetPaymentForm=()=>{document.getElementById("payment-form").reset(),document.getElementById("paymentId").value="",document.getElementById("payment-submit-btn").textContent="Log Payment",document.getElementById("cancel-payment-edit").classList.add("hidden"),document.getElementById("status-payment").classList.add("hidden")};const resetOrderForm=()=>{document.getElementById("order-form").reset(),document.getElementById("orderId").value="",document.getElementById("order-submit-btn").textContent="Log Order",document.getElementById("cancel-order-edit").classList.add("hidden"),document.getElementById("status-message-order").classList.add("hidden"),document.getElementById("orderDueDate").value=getTodayDate()};const renderRecordsHistory=e=>{const t=document.getElementById("history-body");if(t.innerHTML="",0===e.length)return void(t.innerHTML='<tr><td colspan="8" class="text-center py-4 brown-text">No daily production records yet.</td></tr>');e.forEach(e=>{const o=e.date||(e.timestamp?new Date(1e3*e.timestamp.seconds).toLocaleDateString():"N/A"),n=(e.tailoredCovers||0)*17+(e.processorCuts||0)*15,s=(e.productsSold||0)*220,a={date:e.date,tailoredCovers:e.tailoredCovers||0,processorCuts:e.processorCuts||0,completedMattresses:e.completedMattresses||0,productsSold:e.productsSold||0},r=t.insertRow();r.className="border-b border-yellow-200 hover:bg-yellow-50 text-brown-text",r.innerHTML=`<td class="p-2">${o}</td><td class="p-2 text-center">${e.tailoredCovers||0}</td><td class="p-2 text-center">${e.processorCuts||0}</td><td class="p-2 text-center">${e.completedMattresses||0}</td><td class="p-2 text-center">${e.productsSold||0}</td><td class="p-2 text-right font-medium">${formatPHP(s)}</td><td class="p-2 text-right">${formatPHP(n)}</td><td class="p-2 text-center"><button onclick='window.loadRecordForEdit(${JSON.stringify(a)})' class="text-xs bg-yellow-300 text-brown-text px-3 py-1 rounded-full hover:bg-yellow-400 transition">Edit 📝</button></td>`})};const handleDailyEntry=async e=>{e.preventDefault();const t=e.target,o=t.date.value,n={tailoredCovers:parseInt(t.tailoredCovers.value||0),processorCuts:parseInt(t.processorCuts.value||0),completedMattresses:parseInt(t.completedMattresses.value||0),productsSold:parseInt(t.productsSold.value||0)},s=document.getElementById("status-message-daily");if(!o||Object.values(n).every(e=>0===e))return s.textContent="🐥 Please select a date and enter at least one value.",void(s.className="text-sm text-red-600");try{s.classList.add("hidden"),document.getElementById("loading-entry").classList.remove("hidden"),await runTransaction(db,async e=>{const t=doc(db,INVENTORY_DOC_PATH),s=await e.get(t),a=s.exists()?s.data():{totalCoversInStock:0,stockFoam:0,stockFinishedProducts:0,coverDesigns:{}},r=doc(db,DAILY_RECORDS_COLLECTION,o),d=await e.get(r),l=d.exists()?d.data():{tailoredCovers:0,processorCuts:0,completedMattresses:0,productsSold:0},i={covers:n.tailoredCovers-(l.tailoredCovers||0),cuts:n.processorCuts-(l.processorCuts||0),completed:n.completedMattresses-(l.completedMattresses||0),sold:n.productsSold-(l.productsSold||0)};e.set(t,{totalCoversInStock:Math.max(0,(a.totalCoversInStock||0)+i.covers-i.completed),stockFoam:Math.max(0,(a.stockFoam||0)+i.cuts-i.completed),stockFinishedProducts:Math.max(0,(a.stockFinishedProducts||0)+i.completed-i.sold),coverDesigns:a.coverDesigns||{}}),e.set(r,{...n,date:o,timestamp:serverTimestamp()})}),s.textContent=`✨ Daily entry for ${o} UPDATED successfully!`,s.className="text-sm text-green-600",["tailoredCovers","processorCuts","completedMattresses","productsSold"].forEach(e=>t[e].value=0)}catch(e){console.error("Error in daily entry transaction:",e),s.textContent=`Transaction failed: ${e.message}.`,s.className="text-sm text-red-600"}finally{document.getElementById("loading-entry").classList.add("hidden")}};const handleSalaryPayment=async e=>{e.preventDefault();const t=e.target,o={amount:parseFloat(t.paymentAmount.value),recipient:t.paymentRecipient.value,notes:t.paymentNotes.value},n=t.paymentId.value,s=document.getElementById("status-payment");if(isNaN(o.amount)||o.amount<=0||!o.recipient)return s.textContent="⚠️ Please enter a valid amount and recipient.",void(s.className="text-sm text-red-600");try{document.getElementById("loading-payment").classList.remove("hidden"),n?(await updateDoc(doc(db,LABOR_PAYMENTS_COLLECTION,n),{...o,timestamp:serverTimestamp()}),s.textContent="💖 Payment log UPDATED successfully!"):(await addDoc(collection(db,LABOR_PAYMENTS_COLLECTION),{...o,timestamp:serverTimestamp()}),s.textContent=`💖 Payment of ${formatPHP(o.amount)} logged!`),s.className="text-sm text-green-600",resetPaymentForm()}catch(e){console.error("Error logging salary payment:",e),s.textContent=`Payment failed: ${e.message}.`,s.className="text-sm text-red-600"}finally{document.getElementById("loading-payment").classList.add("hidden")}};const handleRecipientChange=()=>{if(document.getElementById("paymentId").value)return;const e=document.getElementById("paymentRecipient").value,t=document.getElementById("paymentAmount");let o=0;"Tailor"===e?o=tailorOutstandingBalance:"Processor"===e?o=processorOutstandingBalance:"General"===e&&(o=tailorOutstandingBalance+processorOutstandingBalance),t.value=Math.max(0,o).toFixed(2)};const handleNewOrder=async e=>{e.preventDefault();const t=e.target,o={clientName:t.clientName.value.trim()||"Valued Customer",quantity:parseInt(t.orderQuantity.value||0),dueDate:t.orderDueDate.value},n=t.orderId.value,s=document.getElementById("status-message-order");if(o.quantity<=0||!o.dueDate)return s.textContent="⚠️ Quantity must be > 0 and Due Date is required.",void(s.className="text-sm text-red-600");try{document.getElementById("loading-order").classList.remove("hidden"),n?(await updateDoc(doc(db,ORDER_TRACKER_COLLECTION,n),{...o,timestamp:serverTimestamp()}),s.textContent="🎉 Order UPDATED successfully!"):(await addDoc(collection(db,ORDER_TRACKER_COLLECTION),{...o,status:"Pending",timestamp:serverTimestamp()}),s.textContent=`🎉 Order for ${o.quantity} units logged!`),s.className="text-sm text-green-600",resetOrderForm()}catch(e){console.error("Error logging new order:",e),s.textContent=`Order failed: ${e.message}.`,s.className="text-sm text-red-600"}finally{document.getElementById("loading-order").classList.add("hidden")}};const handleCompleteOrder=async e=>{const t=document.createElement("div");t.className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-50",t.innerHTML='<div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full"><h3 class="text-xl font-bold mb-3 pink-text">🐥 Confirm Completion</h3><p class="mb-4 text-gray-700">Mark this order as **Completed**?</p><div class="flex justify-end space-x-3"><button id="cancel-btn" class="px-4 py-2 text-gray-600 border rounded-lg hover:bg-gray-100">Cancel</button><button id="confirm-btn" class="px-4 py-2 btn-primary rounded-lg">Confirm</button></div></div>',document.body.appendChild(t),document.getElementById("cancel-btn").onclick=()=>document.body.removeChild(t),document.getElementById("confirm-btn").onclick=async()=>{document.body.removeChild(t);try{await updateDoc(doc(db,ORDER_TRACKER_COLLECTION,e),{status:"Completed",completionDate:getTodayDate()})}catch(e){console.error("Error completing order:",e)}}};const toggleCoverManager=()=>{const e=document.getElementById("cover-manager");e.classList.toggle("hidden"),e.classList.contains("hidden")||loadCoverDesignsForManagement()};const loadCoverDesignsForManagement=()=>{onSnapshot(doc(db,INVENTORY_DOC_PATH),e=>{const t=(e.exists()?e.data().coverDesigns:{})||{},o=document.getElementById("current-design-list");o.innerHTML="";const n=Object.keys(t).sort();0===n.length?o.innerHTML='<p class="text-sm brown-text italic text-center">No designs to manage.</p>':n.forEach(e=>{o.innerHTML+=`<div class="flex items-center justify-between p-2 mb-2 bg-light-yellow rounded-lg border border-yellow-200"><span class="brown-text font-semibold">${e}</span><div class="flex items-center space-x-2"><input type="number" id="qty-${e.replace(/\s/g,"_")}" value="${t[e]}" min="0" class="w-16 p-1 text-center border rounded-lg text-sm input-style"><button onclick="window.updateCoverDesignStock('${e}', document.getElementById('qty-${e.replace(/\s/g,"_")}').value)" class="text-xs pink-accent text-white p-2 rounded-lg hover:bg-pink-500 transition">Update</button></div></div>`})},e=>console.error("Error fetching cover designs:",e))};const handleNewDesign=async e=>{e.preventDefault();const t=e.target,o=t.designName.value.trim().replace(/[^a-zA-Z0-9\s]/g,""),n=parseInt(t.initialStock.value||0),s=document.getElementById("design-status-message");if(!o||n<0)return s.textContent="⚠️ Please enter a valid name and non-negative stock.",void(s.className="text-sm text-red-600");try{await runTransaction(db,async e=>{const t=doc(db,INVENTORY_DOC_PATH),s=await e.get(t),a=s.exists()?s.data():{totalCoversInStock:0,coverDesigns:{}},r={...(a.coverDesigns||{}),[o]:n};e.set(t,{...a,totalCoversInStock:Object.values(r).reduce((e,t)=>e+t,0),coverDesigns:r})}),s.textContent=`🎉 Design '${o}' added successfully!`,s.className="text-sm text-green-600",t.reset()}catch(e){console.error("Error adding new design:",e),s.textContent=`Failed to add design: ${e.message}`,s.className="text-sm text-red-600"}};const updateCoverDesignStock=async(e,t)=>{const o=document.getElementById("design-status-message"),n=parseInt(t);if(isNaN(n)||n<0)return o.textContent="⚠️ Invalid quantity.",void(o.className="text-sm text-red-600");try{await runTransaction(db,async t=>{const o=doc(db,INVENTORY_DOC_PATH),s=await t.get(o),a=s.exists()?s.data():{totalCoversInStock:0,coverDesigns:{}},r={...(a.coverDesigns||{}),[e]:n};t.set(o,{...a,totalCoversInStock:Object.values(r).reduce((e,t)=>e+t,0),coverDesigns:r})}),o.textContent=`✨ Stock for '${e}' updated!`,o.className="text-sm text-green-600"}catch(e){console.error("Error updating design stock:",e),o.textContent=`Failed to update: ${e.message}`,o.className="text-sm text-red-600"}};
+
+        window.onload = initFirebase;
+        window.switchTab=switchTab;window.loadRecordForEdit=loadRecordForEdit;window.loadPaymentForEdit=loadPaymentForEdit;window.loadOrderForEdit=loadOrderForEdit;window.resetPaymentForm=resetPaymentForm;window.resetOrderForm=resetOrderForm;window.handleDailyEntry=handleDailyEntry;window.handleSalaryPayment=handleSalaryPayment;window.handleNewOrder=handleNewOrder;window.handleCompleteOrder=handleCompleteOrder;window.toggleCoverManager=toggleCoverManager;window.handleNewDesign=handleNewDesign;window.updateCoverDesignStock=updateCoverDesignStock;window.handleRecipientChange=handleRecipientChange;
+    </script>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+    <!-- NEW FLUFFY CHICK SVG DEFINITION -->
+    <svg class="absolute w-0 h-0">
+        <defs>
+            <g id="fluffy-chick">
+                <!-- Body -->
+                <path d="M 50 90 C 20 95, 10 70, 20 50 C 30 20, 70 20, 80 50 C 90 70, 80 95, 50 90 Z" fill="#FFD54F" stroke="#FBBF24" stroke-width="3" />
+                <!-- Eyes -->
+                <circle cx="37" cy="55" r="9" fill="#2d2d2d" />
+                <circle cx="63" cy="55" r="9" fill="#2d2d2d" />
+                <circle cx="39" cy="52" r="3" fill="white" />
+                <circle cx="65" cy="52" r="3" fill="white" />
+                <!-- Cheeks -->
+                <circle cx="25" cy="65" r="5" fill="#FBCFE8" opacity="0.8"/>
+                <circle cx="75" cy="65" r="5" fill="#FBCFE8" opacity="0.8"/>
+                <!-- Beak -->
+                <polygon points="47,65 53,65 50,70" fill="#F97316"/>
+                <!-- Flowers -->
+                <g transform="translate(70, 30) rotate(15)">
+                    <circle cx="0" cy="0" r="7" fill="#F9A8D4"/>
+                    <circle cx="0" cy="0" r="3" fill="#FFFBEB"/>
+                </g>
+                 <g transform="translate(62, 22) rotate(-25)">
+                    <circle cx="0" cy="0" r="6" fill="#FBCFE8"/>
+                    <circle cx="0" cy="0" r="2.5" fill="#FFFBEB"/>
+                </g>
+            </g>
+        </defs>
+    </svg>
+
+    <div id="initial-loader" class="fixed inset-0 bg-yellow-50 flex flex-col items-center justify-center z-50">
+        <svg class="w-32 h-32 fluffy-chick-animation"><use href="#fluffy-chick"></use></svg>
+        <p class="text-2xl yellow-text font-semibold mt-4 animate-pulse">Loading Sweechip...</p>
+    </div>
+    
+    <!-- MAIN TRACKER CONTAINER -->
+    <div id="tracker-container" class="hidden w-full">
+        <header class="text-center mb-6">
+             <div class="flex justify-center items-center">
+                <svg class="w-20 h-20 fluffy-chick-animation mr-2"><use href="#fluffy-chick"></use></svg>
+                <h1 class="text-6xl font-extrabold yellow-text">Sweechip</h1>
+            </div>
+            <p class="text-gray-600 italic mt-1 text-sm">Product made with Sweetness but affordable "cheap" (chip)</p>
+            <p class="text-xl text-gray-500 mt-2">Business Production, Salary, & Profit Tracker</p>
+            <p id="user-info" class="text-xs text-gray-400 mt-2"></p>
+        </header>
+
+        <!-- Tab Navigation -->
+        <nav class="flex flex-wrap justify-center mb-6">
+            <button data-tab="productivity" onclick="switchTab('productivity')" class="tab-button">🥚 Productivity</button>
+            <button data-tab="orders" onclick="switchTab('orders')" class="tab-button">💖 Orders</button>
+            <button data-tab="salary" onclick="switchTab('salary')" class="tab-button">💰 Salary</button>
+            <button data-tab="inventory" onclick="switchTab('inventory')" class="tab-button">📦 Inventory</button>
+            <button data-tab="profit" onclick="switchTab('profit')" class="tab-button">⭐ Profit</button>
+            <button data-tab="history" onclick="switchTab('history')" class="tab-button">📝 History</button>
+        </nav>
+        
+        <main class="max-w-7xl mx-auto">
+            <!-- All the tracker tab content goes here... -->
+            <div id="tab-content-productivity" class="tab-content">
+            <div class="max-w-xl mx-auto">
+                <div class="cute-card bg-white p-6 rounded-xl shadow-lg border-pink-accent">
+                    <h2 class="text-2xl font-bold pink-text card-header flex items-center"><span class="text-2xl mr-2">🥚</span> Daily Production & Sales</h2>
+                    <form id="daily-entry-form" onsubmit="window.handleDailyEntry(event)" class="space-y-4">
+                        <div>
+                            <label for="date" class="block text-sm font-medium brown-text">Date</label>
+                            <input type="date" id="date" name="date" required class="mt-1 block w-full rounded-lg input-style">
+                        </div>
+                        <div class="pt-2 border-t border-pink-accent/30">
+                            <p class="text-sm font-bold brown-text mb-1">Employee Output</p>
+                            <label for="tailoredCovers" class="block text-sm font-medium brown-text">Tailor Output (Covers @ P17)</label>
+                            <input type="number" id="tailoredCovers" name="tailoredCovers" min="0" value="0" class="mt-1 block w-full rounded-lg input-style" placeholder="0">
+                            <label for="processorCuts" class="block text-sm font-medium brown-text mt-3">Processor Output (Cuts @ P15)</label>
+                            <input type="number" id="processorCuts" name="processorCuts" min="0" value="0" class="mt-1 block w-full rounded-lg input-style" placeholder="0">
+                        </div>
+                        <div class="pt-2 border-t border-pink-accent/30">
+                            <p class="text-sm font-bold brown-text mb-1">Final Product Tracking</p>
+                            <label for="completedMattresses" class="block text-sm font-medium brown-text">Mattresses Assembled</label>
+                            <input type="number" id="completedMattresses" name="completedMattresses" min="0" value="0" class="mt-1 block w-full rounded-lg input-style" placeholder="0">
+                            <label for="productsSold" class="block text-sm font-medium brown-text mt-3">Products Sold (Units @ P220)</label>
+                            <input type="number" id="productsSold" name="productsSold" min="0" value="0" class="mt-1 block w-full rounded-lg input-style" placeholder="0">
+                        </div>
+                        <p id="status-message-daily" class="text-sm font-medium hidden pt-2"></p>
+                        <button type="submit" class="w-full btn-primary py-3 rounded-lg font-semibold text-lg shadow-md">Log Daily Chirps</button>
+                        <p id="loading-entry" class="text-center text-sm text-gray-500 hidden mt-2">Saving...</p>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div id="tab-content-orders" class="tab-content">
+             <div class="cute-card bg-light-yellow p-6 rounded-xl shadow-lg border-pink-accent">
+                <h2 class="text-2xl font-bold pink-text card-header flex items-center"><span class="text-2xl mr-2">💖</span> Order Tracker</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="md:col-span-1">
+                        <div class="bg-white p-3 rounded-lg text-center mb-4 border border-red-300">
+                            <p class="text-sm brown-text">Total Pending Units</p>
+                            <p id="total-pending-demand" class="text-3xl font-extrabold text-red-600">0</p>
+                        </div>
+                        <form id="order-form" onsubmit="window.handleNewOrder(event)" class="space-y-3">
+                            <h3 class="font-semibold brown-text">Log/Edit Order</h3>
+                            <input type="hidden" id="orderId" name="orderId">
+                            <input type="text" id="clientName" name="clientName" class="mt-1 block w-full rounded-lg input-style" placeholder="Client Name">
+                            <div class="flex space-x-2">
+                                <input type="number" id="orderQuantity" name="orderQuantity" min="1" required class="flex-1 rounded-lg input-style" placeholder="Qty">
+                                <input type="date" id="orderDueDate" name="orderDueDate" required class="flex-1 rounded-lg input-style">
+                            </div>
+                            <p id="status-message-order" class="text-sm font-medium hidden pt-2"></p>
+                            <div class="flex flex-col space-y-2">
+                                <button type="submit" id="order-submit-btn" class="w-full btn-primary py-3 rounded-lg font-semibold shadow-md">Log Order</button>
+                                <button type="button" id="cancel-order-edit" onclick="window.resetOrderForm()" class="w-full btn-cancel py-2 rounded-lg font-semibold hidden">Cancel Edit</button>
+                            </div>
+                            <p id="loading-order" class="text-center text-sm text-gray-500 hidden mt-2">Logging...</p>
+                        </form>
+                    </div>
+                    <div class="md:col-span-2">
+                        <h3 class="text-xl font-bold mb-3 brown-text">Order List</h3>
+                        <div class="overflow-x-auto bg-white/50 rounded-lg">
+                            <table class="min-w-full divide-y divide-yellow-300">
+                                <thead class="brown-text">
+                                    <tr>
+                                        <th class="p-2 text-left text-sm font-semibold uppercase">Client</th><th class="p-2 text-center text-sm font-semibold uppercase">Qty</th>
+                                        <th class="p-2 text-center text-sm font-semibold uppercase">Due</th><th class="p-2 text-center text-sm font-semibold uppercase">Status</th>
+                                        <th class="p-2 text-center text-sm font-semibold uppercase">Action</th><th class="p-2 text-center text-sm font-semibold uppercase">Edit</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="orders-body" class="divide-y divide-yellow-200"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="tab-content-salary" class="tab-content">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="cute-card bg-white p-6 rounded-xl shadow-lg border-yellow-primary">
+                    <h2 class="text-2xl font-bold yellow-text card-header flex items-center"><span class="text-2xl mr-2">💰</span> Salary Status</h2>
+                    <div class="bg-pink-100 p-4 rounded-xl shadow-md mb-4 border border-pink-text">
+                        <p class="font-bold text-lg pink-text">Tailor Status (P17/cover)</p>
+                        <div class="flex justify-between text-sm mt-1"><span>Liability Incurred:</span><span id="tailor-incurred" class="font-medium text-red-600">P0.00</span></div>
+                        <div class="flex justify-between text-sm"><span>Total Paid Out:</span><span id="tailor-paid" class="font-medium text-green-600">P0.00</span></div>
+                        <div class="flex justify-between font-extrabold mt-2"><span>PENDING PAYOUT:</span><span id="tailor-outstanding" class="text-lg text-red-700">P0.00</span></div>
+                    </div>
+                    <div class="bg-yellow-100 p-4 rounded-xl shadow-md mb-6 border border-yellow-text">
+                        <p class="font-bold text-lg yellow-text">Processor Status (P15/cut)</p>
+                        <div class="flex justify-between text-sm mt-1"><span>Liability Incurred:</span><span id="processor-incurred" class="font-medium text-red-600">P0.00</span></div>
+                        <div class="flex justify-between text-sm"><span>Total Paid Out:</span><span id="processor-paid" class="font-medium text-green-600">P0.00</span></div>
+                        <div class="flex justify-between font-extrabold mt-2"><span>PENDING PAYOUT:</span><span id="processor-outstanding" class="text-lg text-red-700">P0.00</span></div>
+                    </div>
+                    <div class="bg-yellow-300 p-5 rounded-lg shadow-inner text-center">
+                        <p class="text-lg font-semibold brown-text">Total Company Liability</p>
+                        <p id="labor-outstanding" class="text-4xl font-extrabold text-red-500">P0.00</p>
+                    </div>
+                </div>
+                <div class="cute-card bg-white p-6 rounded-xl shadow-lg border-pink-accent">
+                    <h3 class="text-xl font-bold mb-3 pink-text card-header">Log Salary Payment</h3>
+                    <form id="payment-form" onsubmit="window.handleSalaryPayment(event)" class="space-y-3">
+                        <input type="hidden" id="paymentId" name="paymentId">
+                        <label for="paymentRecipient" class="block text-sm font-medium brown-text">Recipient</label>
+                        <select id="paymentRecipient" name="paymentRecipient" required class="mt-1 block w-full rounded-lg input-style" onchange="window.handleRecipientChange()"><option value="">-- Select --</option><option value="General">General (Split)</option><option value="Tailor">Tailor</option><option value="Processor">Processor</option></select>
+                        <label for="paymentAmount" class="block text-sm font-medium brown-text">Amount Paid</label>
+                        <input type="number" id="paymentAmount" name="paymentAmount" min="0.01" step="0.01" required class="mt-1 block w-full rounded-lg input-style" placeholder="e.g., 5000">
+                        <label for="paymentNotes" class="block text-sm font-medium brown-text">Notes</label>
+                        <input type="text" id="paymentNotes" name="paymentNotes" class="mt-1 block w-full rounded-lg input-style" placeholder="e.g., Weekly Pay">
+                        <p id="status-payment" class="text-sm font-medium hidden pt-2"></p>
+                        <div class="flex flex-col space-y-2 pt-2">
+                            <button type="submit" id="payment-submit-btn" class="w-full btn-secondary py-3 rounded-lg font-semibold text-lg shadow-md">Log Payment</button>
+                            <button type="button" id="cancel-payment-edit" onclick="window.resetPaymentForm()" class="w-full btn-cancel py-2 rounded-lg font-semibold hidden">Cancel Edit</button>
+                        </div>
+                        <p id="loading-payment" class="text-center text-sm text-gray-500 hidden mt-2">Logging...</p>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div id="tab-content-inventory" class="tab-content">
+             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="cute-card bg-yellow-primary p-6 rounded-xl shadow-lg border-yellow-primary">
+                    <h2 class="text-2xl font-bold brown-text card-header flex items-center"><span class="text-2xl mr-2">📦</span> Inventory</h2>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center text-lg bg-white/70 p-3 rounded-lg shadow-sm"><span>Total Tailored Covers:</span><span id="stock-covers" class="font-bold pink-text">0</span></div>
+                        <div class="border-t border-yellow-400 pt-3">
+                            <h4 class="text-sm font-semibold brown-text mb-2 flex items-center justify-between">Cover Designs 🐥<button onclick="window.toggleCoverManager()" class="text-xs bg-white text-brown-text px-3 py-1 rounded-full border border-yellow-text hover:bg-yellow-100 transition">Manage</button></h4>
+                            <div id="cover-designs-detail" class="space-y-1"></div>
+                        </div>
+                        <div class="flex justify-between items-center text-lg bg-white/70 p-3 rounded-lg shadow-sm"><span>Foam/Cover Cut Stock:</span><span id="stock-foam" class="font-bold pink-text">0</span></div>
+                        <div class="flex justify-between items-center text-lg bg-white/70 p-3 rounded-lg shadow-sm border-t border-yellow-400 mt-4 pt-3"><span>Finished Products Stock:</span><span id="stock-products" class="font-bold pink-text text-xl">0</span></div>
+                    </div>
+                </div>
+                <div id="cover-manager" class="cute-card bg-light-yellow p-6 rounded-xl shadow-lg border-pink-accent hidden">
+                    <h3 class="text-2xl font-bold pink-text card-header flex items-center"><span class="text-2xl mr-2">💖</span> Cover Design Manager</h3>
+                    <p id="design-status-message" class="text-sm font-medium hidden pt-2 mb-4"></p>
+                    <h4 class="font-semibold brown-text mb-2">Add New Design</h4>
+                    <form onsubmit="window.handleNewDesign(event)" class="space-y-3 mb-6 border-b border-gray-400 pb-4">
+                        <input type="text" name="designName" required placeholder="e.g., Pink Chicks Design" class="mt-1 block w-full rounded-lg input-style">
+                        <input type="number" name="initialStock" min="0" value="0" required placeholder="Initial Stock" class="mt-1 block w-full rounded-lg input-style">
+                        <button type="submit" class="w-full btn-primary py-2 rounded-lg font-semibold text-sm">Add Design</button>
+                    </form>
+                    <h4 class="font-semibold brown-text mb-3">Adjust Existing Stock</h4>
+                    <div id="current-design-list" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+        <div id="tab-content-profit" class="tab-content">
+            <div class="cute-card bg-light-yellow p-6 rounded-xl shadow-lg border-pink-accent max-w-2xl mx-auto">
+                <h2 class="text-3xl font-bold pink-text card-header flex items-center"><span class="text-2xl mr-2">⭐</span> Owner Profit Dashboard</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div class="bg-white p-4 rounded-lg shadow-sm">
+                        <p class="text-sm brown-text">Total Revenue</p>
+                        <p id="total-revenue" class="text-2xl font-bold text-green-600">P0.00</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm">
+                        <p class="text-sm brown-text">Total Material Cost (P169.88/pc)</p>
+                        <p id="total-cogs" class="text-2xl font-bold text-red-600">P0.00</p>
+                    </div>
+                </div>
+                <div class="yellow-primary p-5 rounded-lg shadow-inner text-center mb-6">
+                    <p class="text-xl font-semibold brown-text">NET PROFIT (After all costs)</p>
+                    <p id="net-profit" class="text-4xl font-extrabold pink-text">P0.00</p>
+                </div>
+                <h3 class="text-xl font-bold brown-text">Owner Share Breakdown</h3>
+                <div id="owner-shares" class="bg-white mt-3 p-4 rounded-lg shadow-sm border border-yellow-200"></div>
+            </div>
+        </div>
+        <div id="tab-content-history" class="tab-content space-y-6">
+            <div class="cute-card bg-white p-6 rounded-xl shadow-lg border-yellow-primary overflow-x-auto">
+                <h2 class="text-2xl font-bold mb-4 yellow-text flex items-center"><span class="text-2xl mr-2">📝</span> Daily Production History</h2>
+                <table class="min-w-full divide-y divide-yellow-300">
+                    <thead class="bg-yellow-100 brown-text">
+                        <tr>
+                            <th class="p-2 text-left text-sm font-semibold uppercase">Date</th><th class="p-2 text-center text-sm font-semibold uppercase">Covers</th>
+                            <th class="p-2 text-center text-sm font-semibold uppercase">Cuts</th><th class="p-2 text-center text-sm font-semibold uppercase">Assembled</th>
+                            <th class="p-2 text-center text-sm font-semibold uppercase">Sold</th><th class="p-2 text-right text-sm font-semibold uppercase">Revenue</th>
+                            <th class="p-2 text-right text-sm font-semibold uppercase">Labor Incurred</th><th class="p-2 text-center text-sm font-semibold uppercase">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body" class="divide-y divide-yellow-200"></tbody>
+                </table>
+            </div>
+            <div class="cute-card bg-white p-6 rounded-xl shadow-lg border-pink-accent overflow-x-auto">
+                <h3 class="text-xl font-bold mb-4 pink-text">Payment History Log</h3>
+                <table class="min-w-full divide-y divide-pink-200">
+                    <thead class="bg-pink-100 brown-text">
+                        <tr>
+                            <th class="p-2 text-left text-sm font-semibold uppercase">Date</th><th class="p-2 text-right text-sm font-semibold uppercase">Amount</th>
+                            <th class="p-2 text-left text-sm font-semibold uppercase">Info</th><th class="p-2 text-center text-sm font-semibold uppercase">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="payments-body" class="divide-y divide-pink-200"></tbody>
+                </table>
+            </div>
+        </div>
+        </main>
+    </div>
+
+</body>
+</html>
+
